@@ -3,43 +3,67 @@ name: Build Trimmed Geodata
 on:
   schedule:
     - cron: "0 3 * * 0" # Runs every Sunday at 03:00 UTC
-  workflow_dispatch:     # Allows manual trigger button in GitHub UI
+  workflow_dispatch: # Allows manual trigger button in GitHub UI
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: '>=1.22'
+          go-version: ">=1.22"
 
       # ----------------------------------------------------
       # 1. BUILD TRIMMED GEOSITE
       # ----------------------------------------------------
       - name: Checkout & Build Geosite
+        shell: bash
         run: |
+          set -euo pipefail
+
           git clone --depth 1 https://github.com/v2fly/domain-list-community.git geosite-src
           cd geosite-src
 
-          # Create a clean directory for only the lists we need
+          # Copy target lists and recursively resolve every include dependency.
+          # Track visited lists to avoid duplicate work and infinite recursion.
           mkdir -p custom-data
+          declare -A visited=()
 
-          # Define the target categories to keep
-          CATEGORIES=("youtube" "discord" "category-ru" "private")
+          copy_list() {
+            local name="$1"
 
-          # Copy target lists and resolve any internal 'include:' tags
-          for cat in "${CATEGORIES[@]}"; do
-            if [ -f "data/$cat" ]; then
-              cp "data/$cat" custom-data/
-              # Find all included sub-categories (e.g., category-bank-ru inside category-ru)
-              grep -oE 'include:[a-zA-Z0-9_-]+' "data/$cat" | cut -d: -f2 | while read -r subcat; do
-                [ -f "data/$subcat" ] && cp "data/$subcat" custom-data/
-              done
+            if [[ -n "${visited[$name]:-}" ]]; then
+              return 0
             fi
+            visited["$name"]=1
+
+            if [[ ! -f "data/$name" ]]; then
+              echo "::error::Missing GeoSite dependency: $name"
+              return 1
+            fi
+
+            cp "data/$name" "custom-data/$name"
+
+            local subcat
+            while IFS= read -r subcat; do
+              [[ -n "$subcat" ]] || continue
+              copy_list "$subcat"
+            done < <(
+              grep -oE 'include:[a-zA-Z0-9_-]+' "data/$name" |
+                cut -d: -f2 || true
+            )
+          }
+
+          CATEGORIES=("youtube" "discord" "category-ru" "private")
+          for cat in "${CATEGORIES[@]}"; do
+            copy_list "$cat"
           done
 
-          # Replace the source data directory with our trimmed data
           rm -rf data
           mv custom-data data
 
@@ -50,16 +74,20 @@ jobs:
       # 2. BUILD TRIMMED GEOIP
       # ----------------------------------------------------
       - name: Checkout & Build GeoIP
+        shell: bash
         run: |
+          set -euo pipefail
+
           git clone --depth 1 https://github.com/v2fly/geoip.git geoip-src
           cd geoip-src
 
-          # Download community-maintained country CIDR lists (from Loyalsoldier)
           mkdir -p data
-          curl -fsSL -o data/ru.txt https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/ru.txt
+          curl -fsSL \
+            -o data/ru.txt \
+            https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/ru.txt
 
-          # Add standard RFC1918 private IP ranges
-          cat << 'EOF' > data/private.txt
+          # Add private, loopback, link-local, shared, multicast, and reserved ranges.
+          cat > data/private.txt <<'EOF'
           10.0.0.0/8
           127.0.0.0/8
           169.254.0.0/16
@@ -74,7 +102,6 @@ jobs:
           fe80::/10
           EOF
 
-          # Compile using v2fly's official geoip compiler
           go run ./ --outputdir=../dist/
 
       # ----------------------------------------------------
