@@ -70,6 +70,7 @@ jobs:
 
           # Compile using v2fly's official compiler
           go run ./ --outputdir=../dist/
+          mv ../dist/dlc.dat ../dist/geosite.dat
 
       # ----------------------------------------------------
       # 2. BUILD TRIMMED GEOIP
@@ -141,7 +142,7 @@ jobs:
         with:
           tag_name: latest
           files: |
-            dist/dlc.dat
+            dist/geosite.dat
             dist/geoip.dat
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
