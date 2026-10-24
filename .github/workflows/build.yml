@@ -140,9 +140,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: latest
           files: |
             dist/geosite.dat
             dist/geoip.dat
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
