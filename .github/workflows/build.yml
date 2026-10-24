@@ -1,0 +1,92 @@
+name: Build Trimmed Geodata
+
+on:
+  schedule:
+    - cron: "0 3 * * 0" # Runs every Sunday at 03:00 UTC
+  workflow_dispatch:     # Allows manual trigger button in GitHub UI
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '>=1.22'
+
+      # ----------------------------------------------------
+      # 1. BUILD TRIMMED GEOSITE
+      # ----------------------------------------------------
+      - name: Checkout & Build Geosite
+        run: |
+          git clone --depth 1 https://github.com/v2fly/domain-list-community.git geosite-src
+          cd geosite-src
+
+          # Create a clean directory for only the lists we need
+          mkdir -p custom-data
+
+          # Define the target categories to keep
+          CATEGORIES=("youtube" "discord" "category-ru" "private")
+
+          # Copy target lists and resolve any internal 'include:' tags
+          for cat in "${CATEGORIES[@]}"; do
+            if [ -f "data/$cat" ]; then
+              cp "data/$cat" custom-data/
+              # Find all included sub-categories (e.g., category-bank-ru inside category-ru)
+              grep -oE 'include:[a-zA-Z0-9_-]+' "data/$cat" | cut -d: -f2 | while read -r subcat; do
+                [ -f "data/$subcat" ] && cp "data/$subcat" custom-data/
+              done
+            fi
+          done
+
+          # Replace the source data directory with our trimmed data
+          rm -rf data
+          mv custom-data data
+
+          # Compile using v2fly's official compiler
+          go run ./ --outputdir=../dist/
+
+      # ----------------------------------------------------
+      # 2. BUILD TRIMMED GEOIP
+      # ----------------------------------------------------
+      - name: Checkout & Build GeoIP
+        run: |
+          git clone --depth 1 https://github.com/v2fly/geoip.git geoip-src
+          cd geoip-src
+
+          # Download community-maintained country CIDR lists (from Loyalsoldier)
+          mkdir -p data
+          curl -fsSL -o data/ru.txt https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/ru.txt
+
+          # Add standard RFC1918 private IP ranges
+          cat << 'EOF' > data/private.txt
+          10.0.0.0/8
+          127.0.0.0/8
+          169.254.0.0/16
+          172.16.0.0/12
+          192.168.0.0/16
+          100.64.0.0/10
+          224.0.0.0/4
+          240.0.0.0/4
+          255.255.255.255/32
+          ::1/128
+          fc00::/7
+          fe80::/10
+          EOF
+
+          # Compile using v2fly's official geoip compiler
+          go run ./ --outputdir=../dist/
+
+      # ----------------------------------------------------
+      # 3. PUBLISH TRIMMED ASSETS TO RELEASES
+      # ----------------------------------------------------
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          tag_name: latest
+          files: |
+            dist/dlc.dat
+            dist/geoip.dat
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
