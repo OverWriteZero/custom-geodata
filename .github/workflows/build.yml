@@ -103,7 +103,34 @@ jobs:
           fe80::/10
           EOF
 
-          go run ./ --outputdir=../dist/
+          # Configure the current v2fly/geoip CLI. It reads config.json
+          # and does not support the old --outputdir flag.
+          cat > config.json <<'JSON'
+          {
+            "input": [
+              {
+                "type": "text",
+                "action": "add",
+                "args": {
+                  "inputDir": "./data"
+                }
+              }
+            ],
+            "output": [
+              {
+                "type": "v2rayGeoIPDat",
+                "action": "output",
+                "args": {
+                  "outputDir": "../dist",
+                  "outputName": "geoip.dat",
+                  "wantedList": ["ru", "private"]
+                }
+              }
+            ]
+          }
+          JSON
+
+          go run ./ -c config.json
 
       # ----------------------------------------------------
       # 3. PUBLISH TRIMMED ASSETS TO RELEASES
