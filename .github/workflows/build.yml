@@ -60,7 +60,7 @@ jobs:
             )
           }
 
-          CATEGORIES=("youtube" "discord" "category-ru" "private" "google-deepmind" "openai" "steam" "epicgames" "blizzard" "telegram" "twitch", "kick")
+          CATEGORIES=("youtube" "discord" "category-ru" "private" "google-deepmind" "openai" "steam" "epicgames" "blizzard" "telegram" "twitch" "kick")
           for cat in "${CATEGORIES[@]}"; do
             copy_list "$cat"
           done
