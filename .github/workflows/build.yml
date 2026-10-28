@@ -73,68 +73,7 @@ jobs:
           mv ../dist/dlc.dat ../dist/geosite.dat
 
       # ----------------------------------------------------
-      # 2. BUILD TRIMMED GEOIP
-      # ----------------------------------------------------
-      - name: Checkout & Build GeoIP
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          git clone --depth 1 https://github.com/v2fly/geoip.git geoip-src
-          cd geoip-src
-
-          mkdir -p data
-          curl -fsSL \
-            -o data/ru.txt \
-            https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/ru.txt
-
-          # Add private, loopback, link-local, shared, multicast, and reserved ranges.
-          cat > data/private.txt <<'EOF'
-          10.0.0.0/8
-          127.0.0.0/8
-          169.254.0.0/16
-          172.16.0.0/12
-          192.168.0.0/16
-          100.64.0.0/10
-          224.0.0.0/4
-          240.0.0.0/4
-          255.255.255.255/32
-          ::1/128
-          fc00::/7
-          fe80::/10
-          EOF
-
-          # Configure the current v2fly/geoip CLI. It reads config.json
-          # and does not support the old --outputdir flag.
-          cat > config.json <<'JSON'
-          {
-            "input": [
-              {
-                "type": "text",
-                "action": "add",
-                "args": {
-                  "inputDir": "./data"
-                }
-              }
-            ],
-            "output": [
-              {
-                "type": "v2rayGeoIPDat",
-                "action": "output",
-                "args": {
-                  "outputDir": "../dist",
-                  "outputName": "geoip.dat",
-                  "wantedList": ["ru", "private"]
-                }
-              }
-            ]
-          }
-          JSON
-
-          go run ./ -c config.json
-
-      # ----------------------------------------------------
-      # 3. PUBLISH TRIMMED ASSETS TO RELEASES
+      # 2. PUBLISH TRIMMED ASSETS TO RELEASES
       # ----------------------------------------------------
       - name: Publish Release
         uses: softprops/action-gh-release@v2
@@ -144,4 +83,3 @@ jobs:
           tag_name: latest
           files: |
             dist/geosite.dat
-            dist/geoip.dat
